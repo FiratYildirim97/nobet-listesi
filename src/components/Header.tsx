@@ -169,12 +169,7 @@ export const Header: React.FC<HeaderProps> = ({
               <CalendarIcon className="w-5 h-5" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-lg sm:text-xl font-extrabold text-slate-900 tracking-tight">Nöbet & Görev Çizelgesi</h1>
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                  Adil Hafıza Aktif
-                </span>
-              </div>
+              <h1 className="text-lg sm:text-xl font-extrabold text-slate-900 tracking-tight">Nöbet & Görev Çizelgesi</h1>
               <p className="text-xs text-slate-500 font-medium">
                 EÜTF Üroloji Anabilim Dalı Aylık Asistan Çalışma ve Nöbet Programı
               </p>
