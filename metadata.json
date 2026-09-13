@@ -1,0 +1,6 @@
+{
+  "name": "Nöbet Çizelgesi",
+  "description": "Hekim nöbet istekleri, poliklinik-servis-konsültan görev dağılımı, geçmiş hafızalı adil nöbet ve bayram rotasyon planlama sistemi.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
