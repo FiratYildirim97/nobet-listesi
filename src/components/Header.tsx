@@ -205,8 +205,8 @@ export const Header: React.FC<HeaderProps> = ({
               <span>Nöbetçi</span>
             </div>
 
-            {/* Bulut Veritabanı Göstergesi */}
-            {onOpenCloudModal && (
+            {/* Bulut Veritabanı Göstergesi (Yalnızca Yönetici Modunda Görünür, Asistan Girişinde Gizlenir) */}
+            {isAdmin && onOpenCloudModal && (
               <button
                 onClick={onOpenCloudModal}
                 title={isCloudConnected ? "Bulut Veritabanı Bağlı (Supabase)" : "Bulut Veritabanı Ayarları"}
