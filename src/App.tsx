@@ -567,14 +567,31 @@ export default function App() {
     showNotification('Nöbet günleri kurallara uygun olarak takas edildi!', 'success');
   };
 
-  // Apply AI parsed requests from AiRequestModal
-  const handleApplyAiRequests = (updatedDoctors: Doctor[]) => {
+  // Apply AI / Manual parsed requests from AiRequestModal
+  const handleApplyAiRequests = (
+    updatedDoctors: Doctor[],
+    updatedConfigs?: Record<string, MonthlyDoctorConfig>
+  ) => {
     setDoctors(updatedDoctors);
     saveStoredDoctors(updatedDoctors);
+
+    if (roster && updatedConfigs) {
+      const updatedRoster: MonthlyRoster = {
+        ...roster,
+        doctorConfigs: updatedConfigs,
+        updatedAt: new Date().toISOString(),
+      };
+      setRoster(updatedRoster);
+      saveStoredRoster(updatedRoster);
+      if (isSupabaseConfigured()) {
+        saveCloudRoster(updatedRoster).catch(err => console.warn('Supabase cloud roster sync:', err));
+      }
+    }
+
     if (isSupabaseConfigured()) {
       saveCloudDoctors(updatedDoctors).catch(err => console.warn('Supabase cloud doctors sync:', err));
     }
-    showNotification('AI ile ayrıştırılan mazeret ve istekler ekibe işlendi! "Otomatik Dağıt" ile çizelgenizi yenileyebilirsiniz.', 'success');
+    showNotification('Mazeret ve istekler 2. sayfaya (Aylık Tercihler) başarıyla işlendi!', 'success');
   };
 
   // Commit Month to Memory (Adalet ve Geçmiş Hafızaya İşle)
@@ -973,13 +990,14 @@ export default function App() {
         />
       )}
 
-      {/* MODAL 7: AI Leave and Request Parser */}
+      {/* MODAL 7: AI & Manual Leave and Request Parser */}
       <AiRequestModal
         isOpen={isAiOpen}
         onClose={() => setIsAiOpen(false)}
         doctors={doctors}
         currentYear={currentYear}
         currentMonth={currentMonth}
+        doctorConfigs={roster?.doctorConfigs}
         onApplyRequests={handleApplyAiRequests}
       />
 

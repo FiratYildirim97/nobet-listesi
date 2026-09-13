@@ -413,15 +413,15 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
             )}
 
-            {/* AI Mazeret Girişi (Admin Only) */}
+            {/* Mazeret & İstek Girişi (Admin Only) */}
             {isAdmin && onOpenAiModal && (
               <button
                 onClick={onOpenAiModal}
                 className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-purple-50 border border-purple-200 text-purple-700 hover:bg-purple-100 text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
-                title="WhatsApp mazeret mesajlarını yapıştırıp ayrıştırın"
+                title="Hekim mazeret ve nöbet isteklerini tek tek veya toplu olarak girin"
               >
                 <Sparkles className="w-3.5 h-3.5 text-purple-600" />
-                <span>AI Mazeret</span>
+                <span>Mazeret & İstek</span>
               </button>
             )}
 

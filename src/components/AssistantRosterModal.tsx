@@ -93,6 +93,47 @@ const ALL_PRIMARY_DUTIES: {
   { id: 'ameliyathane', label: '✂️ Ameliyathane' },
 ];
 
+export function groupDatesToBadges(dateStrings: string[], monthName: string): { label: string; dates: string[] }[] {
+  if (!dateStrings || dateStrings.length === 0) return [];
+  const sorted = [...dateStrings].sort();
+  const groups: { label: string; dates: string[] }[] = [];
+  let currentGroup: string[] = [];
+
+  for (let i = 0; i < sorted.length; i++) {
+    const curDate = sorted[i];
+    if (currentGroup.length === 0) {
+      currentGroup.push(curDate);
+    } else {
+      const prevDate = currentGroup[currentGroup.length - 1];
+      const prevParts = prevDate.split('-').map(Number);
+      const curParts = curDate.split('-').map(Number);
+
+      if (curParts[0] === prevParts[0] && curParts[1] === prevParts[1] && curParts[2] === prevParts[2] + 1) {
+        currentGroup.push(curDate);
+      } else {
+        const startDay = parseInt(currentGroup[0].split('-')[2], 10);
+        const endDay = parseInt(currentGroup[currentGroup.length - 1].split('-')[2], 10);
+        const label = currentGroup.length === 1 
+          ? `${startDay} ${monthName}` 
+          : `${startDay}-${endDay} ${monthName}`;
+        groups.push({ label, dates: [...currentGroup] });
+        currentGroup = [curDate];
+      }
+    }
+  }
+
+  if (currentGroup.length > 0) {
+    const startDay = parseInt(currentGroup[0].split('-')[2], 10);
+    const endDay = parseInt(currentGroup[currentGroup.length - 1].split('-')[2], 10);
+    const label = currentGroup.length === 1 
+      ? `${startDay} ${monthName}` 
+      : `${startDay}-${endDay} ${monthName}`;
+    groups.push({ label, dates: [...currentGroup] });
+  }
+
+  return groups;
+}
+
 export const AssistantRosterModal: React.FC<AssistantRosterModalProps> = ({
   isOpen,
   onClose,
@@ -118,6 +159,15 @@ export const AssistantRosterModal: React.FC<AssistantRosterModalProps> = ({
   // Tab 2 state: Monthly Configs for selectedYear & selectedMonth
   const [editingConfigs, setEditingConfigs] = useState<Record<string, MonthlyDoctorConfig>>({});
   const [expandedDatePickerDocId, setExpandedDatePickerDocId] = useState<string | null>(null);
+
+  // Tab 2 Quick Leave & Request Form states (AI'sız tek tek / aralıklı ekleme)
+  const [quickDocId, setQuickDocId] = useState<string>('');
+  const [quickType, setQuickType] = useState<'unavail' | 'pref'>('unavail');
+  const [quickIsRange, setQuickIsRange] = useState<boolean>(false);
+  const [quickSingleDay, setQuickSingleDay] = useState<number>(1);
+  const [quickStartDay, setQuickStartDay] = useState<number>(1);
+  const [quickEndDay, setQuickEndDay] = useState<number>(1);
+  const [quickFeedback, setQuickFeedback] = useState<string | null>(null);
 
   // Synchronize when modal opens
   useEffect(() => {
@@ -330,6 +380,82 @@ export const AssistantRosterModal: React.FC<AssistantRosterModalProps> = ({
     handleUpdateMonthlyConfig(docId, {
       unavailableDates: [],
       preferredDates: [],
+    });
+  };
+
+  const handleQuickAddLeaveOrPref = () => {
+    const targetDocId = quickDocId || (editingDoctors[0]?.id);
+    if (!targetDocId) return;
+
+    const docObj = editingDoctors.find(d => d.id === targetDocId);
+    const docName = docObj?.name || 'Seçilen hekim';
+
+    let daysToAdd: number[] = [];
+    if (quickIsRange) {
+      const minD = Math.max(1, Math.min(quickStartDay, quickEndDay));
+      const maxD = Math.min(daysInSelectedMonth, Math.max(quickStartDay, quickEndDay));
+      for (let d = minD; d <= maxD; d++) {
+        daysToAdd.push(d);
+      }
+    } else {
+      const validDay = Math.min(daysInSelectedMonth, Math.max(1, quickSingleDay));
+      daysToAdd.push(validDay);
+    }
+
+    const dateStrings = daysToAdd.map(d => formatDateStr(selectedYear, selectedMonth, d));
+
+    setEditingConfigs(prev => {
+      const current = prev[targetDocId] || { doctorId: targetDocId };
+      const currentUnavails = new Set(current.unavailableDates || []);
+      const currentPrefs = new Set(current.preferredDates || []);
+
+      if (quickType === 'unavail') {
+        dateStrings.forEach(ds => {
+          currentUnavails.add(ds);
+          currentPrefs.delete(ds);
+        });
+      } else {
+        dateStrings.forEach(ds => {
+          currentPrefs.add(ds);
+          currentUnavails.delete(ds);
+        });
+      }
+
+      return {
+        ...prev,
+        [targetDocId]: {
+          ...current,
+          unavailableDates: Array.from(currentUnavails).sort(),
+          preferredDates: Array.from(currentPrefs).sort(),
+        }
+      };
+    });
+
+    const daysText = quickIsRange && quickStartDay !== quickEndDay
+      ? `${Math.min(quickStartDay, quickEndDay)}-${Math.max(quickStartDay, quickEndDay)} ${MONTH_NAMES[selectedMonth - 1]}`
+      : `${quickSingleDay} ${MONTH_NAMES[selectedMonth - 1]}`;
+
+    const typeText = quickType === 'unavail' ? 'İzinli (Nöbet Tutamaz)' : 'Nöbet İsteği';
+    setQuickFeedback(`✓ ${docName} için ${daysText} ${typeText} olarak eklendi!`);
+    setTimeout(() => setQuickFeedback(null), 4000);
+  };
+
+  const handleRemoveDateBadge = (docId: string, type: 'unavail' | 'pref', datesToRemove: string[]) => {
+    setEditingConfigs(prev => {
+      const current = prev[docId] || { doctorId: docId };
+      if (type === 'unavail') {
+        const remaining = (current.unavailableDates || []).filter(d => !datesToRemove.includes(d));
+        return {
+          ...prev,
+          [docId]: { ...current, unavailableDates: remaining }
+        };
+      } else {
+        const remaining = (current.preferredDates || []).filter(d => !datesToRemove.includes(d));
+        return {
+          ...prev,
+          [docId]: { ...current, preferredDates: remaining }
+        };
+      }
     });
   };
 
@@ -844,7 +970,158 @@ export const AssistantRosterModal: React.FC<AssistantRosterModalProps> = ({
             </div>
 
             {/* Monthly Configs List */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-3 bg-slate-50/50">
+            <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-slate-50/50">
+              
+              {/* HIZLI İZİN & NÖBET İSTEĞİ EKLEME PANELİ (AI GEREKMEDEN) */}
+              <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-blue-950 text-white p-4 rounded-2xl shadow-md border border-white/15">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-xl bg-indigo-500/30 text-indigo-300 flex items-center justify-center font-black text-sm border border-indigo-400/30">
+                      ⚡
+                    </div>
+                    <div>
+                      <h4 className="text-xs sm:text-sm font-black text-white tracking-tight flex items-center gap-2">
+                        <span>Hızlı İzin & Nöbet İsteği Ekle</span>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
+                          AI Gerekmez
+                        </span>
+                      </h4>
+                      <p className="text-[11px] text-blue-200/80">
+                        {MONTH_NAMES[selectedMonth - 1]} {selectedYear} ayı için asistan seçip tek tek veya aralık olarak nöbet istek/izinlerini ekleyin.
+                      </p>
+                    </div>
+                  </div>
+
+                  {quickFeedback && (
+                    <div className="px-3 py-1 rounded-lg bg-emerald-500/20 border border-emerald-400/40 text-emerald-200 text-xs font-bold animate-in fade-in flex items-center gap-1.5">
+                      <Check className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>{quickFeedback}</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end bg-white/5 p-3 rounded-xl border border-white/10">
+                  {/* 1. Asistan Seçimi */}
+                  <div className="sm:col-span-4">
+                    <label className="text-[11px] font-bold text-indigo-200 block mb-1">
+                      Asistan Hekim:
+                    </label>
+                    <select
+                      value={quickDocId || (editingDoctors[0]?.id || '')}
+                      onChange={e => setQuickDocId(e.target.value)}
+                      className="w-full text-xs font-bold py-2 px-2.5 rounded-lg bg-slate-900 border border-white/20 text-white focus:ring-2 focus:ring-indigo-400 outline-hidden cursor-pointer"
+                    >
+                      {editingDoctors.map(d => (
+                        <option key={d.id} value={d.id} className="bg-slate-900 text-white">
+                          {d.seniorityRank}. {d.name} ({d.seniority === 'kidemli' ? 'Kıdemli' : 'Kıdemsiz'})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* 2. Kayıt Türü */}
+                  <div className="sm:col-span-3">
+                    <label className="text-[11px] font-bold text-indigo-200 block mb-1">
+                      Kayıt Türü:
+                    </label>
+                    <div className="grid grid-cols-2 gap-1 bg-slate-900/80 p-1 rounded-lg border border-white/15">
+                      <button
+                        type="button"
+                        onClick={() => setQuickType('unavail')}
+                        className={'py-1.5 px-2 rounded-md text-[11px] font-black transition-all cursor-pointer flex items-center justify-center gap-1 ' + (
+                          quickType === 'unavail'
+                            ? 'bg-rose-600 text-white shadow-xs'
+                            : 'text-rose-200/70 hover:text-rose-100 hover:bg-white/5'
+                        )}
+                      >
+                        <span>🔴 İzinli</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setQuickType('pref')}
+                        className={'py-1.5 px-2 rounded-md text-[11px] font-black transition-all cursor-pointer flex items-center justify-center gap-1 ' + (
+                          quickType === 'pref'
+                            ? 'bg-emerald-600 text-white shadow-xs'
+                            : 'text-emerald-200/70 hover:text-emerald-100 hover:bg-white/5'
+                        )}
+                      >
+                        <span>🟢 İstek</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 3. Tarih Seçimi (Tek Gün veya Aralık) */}
+                  <div className="sm:col-span-3">
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[11px] font-bold text-indigo-200">
+                        {quickIsRange ? 'Gün Aralığı:' : 'Nöbet Günü:'}
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setQuickIsRange(!quickIsRange)}
+                        className="text-[10px] text-indigo-300 hover:text-white underline font-bold cursor-pointer"
+                      >
+                        {quickIsRange ? 'Tek Gün' : 'Aralık Seç (Örn: 12-16)'}
+                      </button>
+                    </div>
+
+                    {quickIsRange ? (
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="number"
+                          min={1}
+                          max={daysInSelectedMonth}
+                          value={quickStartDay}
+                          onChange={e => setQuickStartDay(Math.max(1, Math.min(daysInSelectedMonth, parseInt(e.target.value, 10) || 1)))}
+                          className="w-full text-center text-xs font-black py-2 px-1 rounded-lg bg-slate-900 border border-white/20 text-white focus:ring-2 focus:ring-indigo-400 outline-hidden"
+                          placeholder="Başlangıç"
+                        />
+                        <span className="text-white/60 font-black text-xs">-</span>
+                        <input
+                          type="number"
+                          min={1}
+                          max={daysInSelectedMonth}
+                          value={quickEndDay}
+                          onChange={e => setQuickEndDay(Math.max(1, Math.min(daysInSelectedMonth, parseInt(e.target.value, 10) || 1)))}
+                          className="w-full text-center text-xs font-black py-2 px-1 rounded-lg bg-slate-900 border border-white/20 text-white focus:ring-2 focus:ring-indigo-400 outline-hidden"
+                          placeholder="Bitiş"
+                        />
+                        <span className="text-[11px] font-bold text-indigo-200 shrink-0">
+                          {MONTH_NAMES[selectedMonth - 1]}
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="number"
+                          min={1}
+                          max={daysInSelectedMonth}
+                          value={quickSingleDay}
+                          onChange={e => setQuickSingleDay(Math.max(1, Math.min(daysInSelectedMonth, parseInt(e.target.value, 10) || 1)))}
+                          className="w-full text-center text-xs font-black py-2 px-2 rounded-lg bg-slate-900 border border-white/20 text-white focus:ring-2 focus:ring-indigo-400 outline-hidden"
+                        />
+                        <span className="text-[11px] font-bold text-indigo-200 shrink-0">
+                          {MONTH_NAMES[selectedMonth - 1]} {selectedYear}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 4. Ekle Butonu */}
+                  <div className="sm:col-span-2">
+                    <button
+                      type="button"
+                      onClick={handleQuickAddLeaveOrPref}
+                      className="w-full py-2 px-3 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-black text-xs shadow-md transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
+                      title="Listeye ekle (birden fazla ekleyebilirsiniz)"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>Ekle</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
               {editingDoctors.map((doc) => {
                 const isSenior = doc.seniority === 'kidemli';
                 const isOnlyOR = !!doc.isOnlyAmeliyathane;
@@ -853,6 +1130,8 @@ export const AssistantRosterModal: React.FC<AssistantRosterModalProps> = ({
                 const compDuties = isOnlyOR ? [] : (config.compensationDuties || []);
                 const unavails = config.unavailableDates || [];
                 const prefs = config.preferredDates || [];
+                const unavailBadges = groupDatesToBadges(unavails, MONTH_NAMES[selectedMonth - 1]);
+                const prefBadges = groupDatesToBadges(prefs, MONTH_NAMES[selectedMonth - 1]);
                 const isDatePickerOpen = expandedDatePickerDocId === doc.id;
 
                 return (
@@ -1025,6 +1304,47 @@ export const AssistantRosterModal: React.FC<AssistantRosterModalProps> = ({
                         </button>
                       </div>
                     </div>
+
+                    {/* İzinler & İstekler Rozetleri (Badges) */}
+                    {(unavailBadges.length > 0 || prefBadges.length > 0) && (
+                      <div className="flex items-center gap-1.5 flex-wrap mt-2.5 pt-2.5 border-t border-slate-100">
+                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider">
+                          Bu Ayki Kayıtlar:
+                        </span>
+                        {unavailBadges.map((b, idx) => (
+                          <span
+                            key={'u_' + idx}
+                            className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-50 text-rose-800 border border-rose-200 shadow-2xs"
+                          >
+                            <span>🚫 {b.label} (İzinli)</span>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveDateBadge(doc.id, 'unavail', b.dates)}
+                              className="hover:bg-rose-200/80 rounded p-0.5 text-rose-600 transition-colors cursor-pointer"
+                              title="Bu izni sil"
+                            >
+                              <X className="w-2.5 h-2.5" />
+                            </button>
+                          </span>
+                        ))}
+                        {prefBadges.map((b, idx) => (
+                          <span
+                            key={'p_' + idx}
+                            className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 shadow-2xs"
+                          >
+                            <span>⭐ {b.label} (İstek)</span>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveDateBadge(doc.id, 'pref', b.dates)}
+                              className="hover:bg-emerald-200/80 rounded p-0.5 text-emerald-600 transition-colors cursor-pointer"
+                              title="Bu isteği sil"
+                            >
+                              <X className="w-2.5 h-2.5" />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
 
                     {/* Inline Expandable Mini Calendar Picker */}
                     {isDatePickerOpen && (
